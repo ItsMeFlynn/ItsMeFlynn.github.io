@@ -6,10 +6,10 @@ function kernExploit() {
 
     // 1. We open /dev/bpf0 to acquire a reference to a bpf device
     var fd = p.syscall("open", p.stringify("/dev/bpf0"), 2).low;
-    var fd1 = p.syscall("open", p.stringify("/dev/bpf0"), 2).low; 
+    var fd1 = p.syscall("sys_open", stringify("/dev/bpf"), 2, 0); // 0666 permissions, open as O_RDWR
 
-    if (fd == (-1 >>> 0)) {
-    throw "Failed to open first bpf device!"
+    if(fd1 < 0) {
+      throw "Failed to open first /dev/bpf device!";
     }
 
     // Write BPF programs
