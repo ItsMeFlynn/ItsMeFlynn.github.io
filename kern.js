@@ -47,6 +47,7 @@ function kernExploit() {
         if (p.syscall("sys_write", fd2, spadp, 40).low == (-1 >>> 0)) {
           throw "Failed to bind to second /dev/bpf device!";
         }
+		throw "Work?";
       }
 
     // Write BPF programs
