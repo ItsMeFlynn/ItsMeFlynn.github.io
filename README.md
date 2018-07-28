@@ -1,35 +1,46 @@
-# PS4 5.05 Kernel Exploit
----
-## Summary
-In this project you will find a full implementation of the second "bpf" kernel exploit for the PlayStation 4 on 5.05. It will allow you to run arbitrary code as kernel, to allow jailbreaking and kernel-level modifications to the system. This exploit also contains autolaunching code for Mira and Vortex's HEN payload. Subsequent loads will launch the usual payload launcher.
+  INFORMATION
+==========================
+ETA:Full V2 Are coming Soon 
+New : Improving Performance
+New Design 
+And more ...
 
-This bug was discovered by qwertyoruiopz, and can be found hosted on his website [here](http://crack.bargains/505k/). The [GitHub Pages site](https://cryptogenic.github.io/PS4-5.05-Kernel-Exploit/) automatically generated from this repository should also work.
+==========================
 
-## Patches Included
-The following patches are made by default in the kernel ROP chain:
-1) Disable kernel write protection
-2) Allow RWX (read-write-execute) memory mapping
-3) Syscall instruction allowed anywhere
-4) Dynamic Resolving (`sys_dynlib_dlsym`) allowed from any process
-4) Custom system call #11 (`kexec()`) to execute arbitrary code in kernel mode
-5) Allow unprivileged users to call `setuid(0)` successfully. Works as a status check, doubles as a privilege escalation.
+PS4 5.X FullAutoInstall WebKit Exploit  
+===========================
+Based on:
 
-## Payloads included
-1) Vortex's HEN (Homebrew Enabler)
-2) Mira
+ - Original source By <a href="https://github.com/alexzzz9">ALEXZZZ9</a><br>
+ - Re-Code By [XiRaLxRd](https://twitter.com/xiranozer)
+ - [CVE-2017-7005](https://bugs.chromium.org/p/project-zero/issues/detail?id=1208)
+ - [PegaSwitch](https://github.com/reswitched/pegaswitch) ([Copyright 2017 ReSwitched Team](https://github.com/reswitched/pegaswitch/blob/master/LICENSE.md))
+ - 4.0x exploit by [qwertyoruiopz](https://twitter.com/qwertyoruiopz)
+ 
+Why PS4 FAI Tool ?
+============
+> Full Auto
+> Lots of Updates
+> More Things Comming Soon
+> The Better Webkit Hack
+> This exploit supports all PS4 5.XX (5.0>5.50)!
+			
+Installation
+============
 
-## Notes
-- The page will crash on successful kernel exploitation, this is normal
+1. Install the latest version of node from [nodejs.org](https://nodejs.org)
+2. Clone this repository
+3. Run `npm install`
 
+Usage
+=====
+Launch PS4 , Use PS4 Web Navigator 
+Go to this link > https://itsxirano.github.io/PS4AutoExploit/  
+> 24/24 ONLINE AND UPDATE BETTER SOLUTION
 
-## Contributors
-Massive credits to the following:
+Or Use localhost , Like XAMPP to host the exploit
 
-- [qwertyoruiopz](https://twitter.com/qwertyoruiopz)
-- [Flatz](https://twitter.com/flat_z)
-- [Vortex](https://github.com/xvortex)
-- [OpenOrbis Team](https://github.com/OpenOrbis/)
-- Anonymous
+License
+=======
 
-## Additional Thanks
-- [Niema Moshiri](https://github.com/niemasd)
+MIT License. See attached `LICENSE.md` file.
